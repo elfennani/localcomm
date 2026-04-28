@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - "master"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release CLI
+        run: cargo build --release --bin cli
+
+      - name: Build release server
+        run: cargo build --release --bin server
+
+      - name: Prepare binary
+        run: |
+          mkdir dist
+          cp target/release/cli dist/localcomm-cli
+          cp target/release/server dist/localcomm-server
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/localcomm-cli
+            dist/localcomm-server
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
