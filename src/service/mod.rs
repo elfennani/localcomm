@@ -1,5 +1,5 @@
 use local_ip_address::local_ip;
-use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use mdns_sd::{ScopedIp, ServiceDaemon, ServiceEvent, ServiceInfo};
 use slugify::slugify;
 use std::sync::{Arc, Mutex};
 use tokio::task;
@@ -109,28 +109,40 @@ impl LocalCommService {
                                 continue;
                             }
                         }
+
+                        let ip_addr = match resolved.addresses.iter().find(|d| d.is_ipv4()) {
+                            None => {
+                                continue;
+                            }
+                            Some(ip) => {
+                                ip.to_string()
+                            }
+                        };
+
+                        let device_name = match resolved.txt_properties.get("device_name") {
+                            None => "Not named",
+                            Some(property) => property.val_str(),
+                        };
                         println!(
                             "[SERVICE_DISCOVERY] Resolved a new service: {} ({})",
-                            resolved.fullname,
-                            match resolved.txt_properties.get("device_name") {
-                                None => "Not named",
-                                Some(property) => property.val_str(),
-                            },
+                            resolved.fullname, device_name
                         );
+
+                        println!("[SERVICE_DISCOVERY] Service resolved: {:?}", resolved,);
 
                         let mut lock = device_list_mutex.lock().unwrap();
 
                         (*lock).push(LocalCommDevice {
-                            name: resolved.fullname.clone(),
-                            address: format!("http://{}:50051", resolved.fullname),
+                            name: device_name.to_string(),
+                            address: format!("http://{}:50051", ip_addr),
                         });
                     }
-                    ServiceEvent::ServiceFound(_, fullname) => {
-                        if fullname.starts_with(device_name.as_str()) {
+                    ServiceEvent::ServiceFound(_, full_name) => {
+                        if full_name.starts_with(device_name.as_str()) {
                             continue;
                         }
 
-                        println!("[SERVICE_DISCOVERY] Service found: {}", fullname);
+                        println!("[SERVICE_DISCOVERY] Service found: {}", full_name);
                     }
                     ServiceEvent::SearchStarted(_) => {}
                     other_event => {
