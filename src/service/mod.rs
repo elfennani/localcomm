@@ -1,12 +1,19 @@
 use local_ip_address::local_ip;
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use slugify::slugify;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::task;
+
+#[derive(Debug, Default)]
+pub struct LocalCommDevice {
+    pub name: String,
+    pub address: String,
+}
 
 pub struct LocalCommService {
     service_type: String,
     mdns: Arc<ServiceDaemon>,
+    pub devices: Arc<Mutex<Vec<LocalCommDevice>>>,
 }
 
 impl LocalCommService {
@@ -16,10 +23,12 @@ impl LocalCommService {
         LocalCommService {
             service_type: service_type.to_string(),
             mdns,
+            // devices: Mutex::new(Arc::new(Vec::new())),
+            devices: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
-    pub fn start(&self) {
+    pub fn start(&mut self) {
         self.broadcast_service();
         self.start_discovery();
     }
@@ -82,12 +91,13 @@ impl LocalCommService {
         });
     }
 
-    fn start_discovery(&self) {
+    fn start_discovery(&mut self) {
         let mdns = self.mdns.clone();
 
         let service_type = self.service_type.clone();
         let device_name = slugify!(whoami::hostname().unwrap().as_str(), separator = "_");
         let receiver = mdns.browse(&service_type).expect("Failed to browse");
+        let device_list_mutex = self.devices.clone();
 
         task::spawn(async move {
             println!("[SERVICE_DISCOVERY] Discovery started");
@@ -105,8 +115,15 @@ impl LocalCommService {
                             match resolved.txt_properties.get("device_name") {
                                 None => "Not named",
                                 Some(property) => property.val_str(),
-                            }
+                            },
                         );
+
+                        let mut lock = device_list_mutex.lock().unwrap();
+
+                        (*lock).push(LocalCommDevice {
+                            name: resolved.fullname.clone(),
+                            address: format!("http://{}:50051", resolved.fullname),
+                        });
                     }
                     ServiceEvent::ServiceFound(_, fullname) => {
                         if fullname.starts_with(device_name.as_str()) {

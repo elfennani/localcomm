@@ -1,8 +1,13 @@
 #[macro_use]
 extern crate slugify;
-use crate::service::LocalCommService;
+
+use crate::localcomm::{
+    Device, Empty, GetDeviceListRequest, GetDeviceListResponse, TextTypeRequest,
+};
+use crate::service::{LocalCommDevice, LocalCommService};
+use enigo::{Enigo, Keyboard, Settings};
 use localcomm::local_comm_server::{LocalComm, LocalCommServer};
-use localcomm::{HelloReply, HelloRequest};
+use std::sync::{Arc, Mutex};
 use tokio::signal;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
@@ -13,32 +18,60 @@ pub mod localcomm {
     tonic::include_proto!("localcomm");
 }
 
-#[derive(Debug, Default)]
-pub struct LocalCommApp {}
+#[derive(Debug)]
+pub struct LocalCommApp {
+    device_list: Arc<Mutex<Vec<LocalCommDevice>>>,
+}
+
+impl LocalCommApp {
+    pub fn new(device_list: Arc<Mutex<Vec<LocalCommDevice>>>) -> Self {
+        LocalCommApp { device_list }
+    }
+}
 
 #[tonic::async_trait]
 impl LocalComm for LocalCommApp {
-    async fn say_hello(
+    async fn get_device_list(
         &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
-        println!("Got a request: {:?}", request);
+        request: Request<GetDeviceListRequest>,
+    ) -> Result<Response<GetDeviceListResponse>, Status> {
+        println!("Got a request from {:?}", request.remote_addr());
+        let device_list: Vec<Device> = self
+            .device_list
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|d| Device {
+                name: d.name.clone(),
+                address: d.address.clone(),
+            })
+            .collect();
 
-        let reply = HelloReply {
-            message: format!("Hello {}!", request.into_inner().name),
-        };
+        Ok(Response::new(GetDeviceListResponse { list: device_list }))
+    }
 
-        Ok(Response::new(reply))
+    async fn type_text(
+        &self,
+        request: Request<TextTypeRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let mut enigo =
+            Enigo::new(&Settings::default()).map_err(|e| Status::unknown(e.to_string()))?;
+
+        enigo
+            .text(request.into_inner().text.as_str())
+            .map_err(|e| Status::unknown(e.to_string()))?;
+
+        Ok(Response::new(Empty {}))
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let service = LocalCommService::new("_localcomm._tcp.local.");
+    let mut service = LocalCommService::new("_localcomm._tcp.local.");
     service.start();
 
     let addr = "0.0.0.0:50051".parse()?;
-    let localcomm = LocalCommApp::default();
+    let localcomm = LocalCommApp::new(service.devices.clone());
 
     println!("LocalComm instance listening on {}", addr);
     let server = Server::builder()

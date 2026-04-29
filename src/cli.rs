@@ -1,7 +1,8 @@
-use crate::localcomm::HelloRequest;
 use crate::localcomm::local_comm_client::LocalCommClient;
+use crate::localcomm::{GetDeviceListRequest, HelloRequest, TextTypeRequest};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use tonic::Request;
 
 pub mod localcomm {
     tonic::include_proto!("localcomm");
@@ -27,17 +28,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// does testing things
-    Test {
-        /// lists test values
+    ListDevices,
+    Type {
         #[arg(short, long)]
-        list: bool,
-    },
-    /// Simply prints a name
-    PrintName {
-        name: String,
-        #[arg(long)]
-        age: i8
+        text: String,
+        #[arg(short, long)]
+        device: String,
     },
 }
 
@@ -45,29 +41,38 @@ enum Commands {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
+    let mut client = LocalCommClient::connect("http://localhost:50051").await?;
+
     match &cli.command {
-        Some(Commands::Test { list }) => {
-            if *list {
-                println!("Printing testing lists...");
-            } else {
-                println!("Not printing testing lists...");
-            }
+        Some(Commands::Type {
+            text,
+            device: device_name,
+        }) => {
+            let request = Request::new(GetDeviceListRequest {});
+            let response = client.get_device_list(request).await?;
+            let address = response
+                .into_inner()
+                .list
+                .iter()
+                .find(|d| d.name == *device_name)
+                .expect("Device not found!")
+                .address
+                .clone();
+
+            let mut client = LocalCommClient::connect(address).await?;
+            let request = Request::new(TextTypeRequest { text: text.clone() });
+            client.type_text(request).await?;
         }
-        Some(Commands::PrintName { name, age }) => {
-            println!("Your name is {} ({}yo)", name, age);
+        Some(Commands::ListDevices) => {
+            let request = Request::new(GetDeviceListRequest {});
+            let response = client.get_device_list(request).await?;
+
+            response.into_inner().list.iter().for_each(|d| {
+                println!("{}: {}", d.name, d.address);
+            });
         }
-        None => {}
-    }
-
-    let mut client = LocalCommClient::connect("http://localcomm.local:50051").await?;
-
-    let request = tonic::Request::new(HelloRequest {
-        name: "Nizar".into(),
-    });
-
-    let response = client.say_hello(request).await?;
-
-    println!("RESPONSE={}", response.into_inner().message);
+        _ => {}
+    };
 
     Ok(())
 }
