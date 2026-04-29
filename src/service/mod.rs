@@ -23,7 +23,6 @@ impl LocalCommService {
         LocalCommService {
             service_type: service_type.to_string(),
             mdns,
-            // devices: Mutex::new(Arc::new(Vec::new())),
             devices: Arc::new(Mutex::new(Vec::new())),
         }
     }
@@ -60,9 +59,6 @@ impl LocalCommService {
                 }
             });
 
-            // Create a service info.
-            // Make sure that the service name: "mdns-sd-my-test" is not longer than the max length limit (15 by default).
-
             let device_name = whoami::hostname().unwrap();
             let instance_name = slugify!(&device_name, separator = "_");
             let ip = local_ip().unwrap().to_string();
@@ -85,7 +81,6 @@ impl LocalCommService {
             )
             .unwrap();
 
-            // Register with the daemon, which publishes the service.
             mdns.register(my_service)
                 .expect("Failed to register our service");
         });

@@ -4,6 +4,7 @@ package localcomm;
 service LocalComm {
   rpc GetDeviceList (GetDeviceListRequest) returns (GetDeviceListResponse);
   rpc TypeText (TextTypeRequest) returns (Empty);
+  rpc RunCommand (RunCommandRequest) returns (Empty);
 }
 
 message TextTypeRequest{
@@ -19,6 +20,10 @@ message Device{
 message GetDeviceListRequest{}
 message GetDeviceListResponse{
   repeated Device list = 1;
+}
+
+message RunCommandRequest{
+  string command = 1;
 }
 
 message Empty{}

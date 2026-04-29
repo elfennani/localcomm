@@ -1,8 +1,8 @@
 use crate::localcomm::local_comm_client::LocalCommClient;
-use crate::localcomm::{GetDeviceListRequest, TextTypeRequest};
+use crate::localcomm::{GetDeviceListRequest, RunCommandRequest, TextTypeRequest};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 use tonic::Request;
+use tonic::transport::Channel;
 
 pub mod localcomm {
     tonic::include_proto!("localcomm");
@@ -11,17 +11,6 @@ pub mod localcomm {
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// Optional name to operate on
-    name: Option<String>,
-
-    /// Sets a custom config file
-    #[arg(short, long, value_name = "FILE")]
-    config: Option<PathBuf>,
-
-    /// Turn debugging information on
-    #[arg(short, long, action = clap::ArgAction::Count)]
-    debug: u8,
-
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -35,7 +24,13 @@ enum Commands {
         #[arg(short, long)]
         device: String,
         #[arg(short, long)]
-        submit: bool
+        submit: bool,
+    },
+    RunCommand {
+        #[arg(short, long)]
+        device: String,
+        #[arg(short, long)]
+        command: String,
     },
 }
 
@@ -49,21 +44,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Type {
             text,
             device: device_name,
-            submit
+            submit,
         }) => {
-            let request = Request::new(GetDeviceListRequest {});
-            let response = client.get_device_list(request).await?;
-            let address = response
-                .into_inner()
-                .list
-                .iter()
-                .find(|d| d.name == *device_name)
-                .expect("Device not found!")
-                .address
-                .clone();
-
-            let mut client = LocalCommClient::connect(address).await?;
-            let request = Request::new(TextTypeRequest { text: text.clone(), submit: *submit });
+            let mut client = create_device_client(&mut client, device_name.as_str()).await;
+            let request = Request::new(TextTypeRequest {
+                text: text.clone(),
+                submit: *submit,
+            });
             client.type_text(request).await?;
         }
         Some(Commands::ListDevices) => {
@@ -74,8 +61,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("{}: {}", d.name, d.address);
             });
         }
-        _ => {}
+        Some(Commands::RunCommand { device, command }) => {
+            let mut client = create_device_client(&mut client, device.as_str()).await;
+            let request = Request::new(RunCommandRequest {
+                command: command.to_string(),
+            });
+            client.run_command(request).await?;
+        }
+        None => {}
     };
 
     Ok(())
+}
+
+async fn create_device_client(
+    local_client: &mut LocalCommClient<Channel>,
+    device_name: &str,
+) -> LocalCommClient<Channel> {
+    let request = Request::new(GetDeviceListRequest {});
+    let response = local_client.get_device_list(request).await.unwrap();
+    let address = response
+        .into_inner()
+        .list
+        .iter()
+        .find(|d| d.name == *device_name)
+        .expect("Device not found!")
+        .address
+        .clone();
+
+    LocalCommClient::connect(address).await.unwrap()
 }

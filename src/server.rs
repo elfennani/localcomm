@@ -2,7 +2,7 @@
 extern crate slugify;
 
 use crate::localcomm::{
-    Device, Empty, GetDeviceListRequest, GetDeviceListResponse, TextTypeRequest,
+    Device, Empty, GetDeviceListRequest, GetDeviceListResponse, RunCommandRequest, TextTypeRequest,
 };
 use crate::service::{LocalCommDevice, LocalCommService};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
@@ -68,6 +68,15 @@ impl LocalComm for LocalCommApp {
         if req.submit {
             enigo.key(Key::Return, Direction::Click).unwrap_or_default();
         }
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn run_command(
+        &self,
+        request: Request<RunCommandRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        std::process::Command::new(request.into_inner().command).spawn()?;
 
         Ok(Response::new(Empty {}))
     }
