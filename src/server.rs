@@ -56,18 +56,17 @@ impl LocalComm for LocalCommApp {
     ) -> Result<Response<Empty>, Status> {
         let mut enigo =
             Enigo::new(&Settings::default()).map_err(|e| Status::unknown(e.to_string()))?;
-        let text = request.into_inner().text;
-        let mut lines = text.lines().peekable();
 
-        while let Some(line) = lines.next() {
-            enigo
-                .text(line)
-                .map_err(|e| Status::unknown(e.to_string()))
-                .unwrap_or_default();
+        let req = request.into_inner();
+        let text = req.text;
 
-            if lines.peek().is_some() {
-                enigo.key(Key::Return, Direction::Click).unwrap_or_default();
-            }
+        enigo
+            .text(text.as_str())
+            .map_err(|e| Status::unknown(e.to_string()))
+            .unwrap_or_default();
+
+        if req.submit {
+            enigo.key(Key::Return, Direction::Click).unwrap_or_default();
         }
 
         Ok(Response::new(Empty {}))

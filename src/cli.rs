@@ -1,5 +1,5 @@
 use crate::localcomm::local_comm_client::LocalCommClient;
-use crate::localcomm::{GetDeviceListRequest, HelloRequest, TextTypeRequest};
+use crate::localcomm::{GetDeviceListRequest, TextTypeRequest};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tonic::Request;
@@ -34,6 +34,8 @@ enum Commands {
         text: String,
         #[arg(short, long)]
         device: String,
+        #[arg(short, long)]
+        submit: bool
     },
 }
 
@@ -47,6 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(Commands::Type {
             text,
             device: device_name,
+            submit
         }) => {
             let request = Request::new(GetDeviceListRequest {});
             let response = client.get_device_list(request).await?;
@@ -60,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .clone();
 
             let mut client = LocalCommClient::connect(address).await?;
-            let request = Request::new(TextTypeRequest { text: text.clone() });
+            let request = Request::new(TextTypeRequest { text: text.clone(), submit: *submit });
             client.type_text(request).await?;
         }
         Some(Commands::ListDevices) => {
