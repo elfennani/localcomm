@@ -61,7 +61,7 @@ impl LocalComm for LocalCommApp {
         if text.contains("\n") {
             text.split("\n").for_each(|s| {
                 enigo
-                    .text(text.replace("\n", "").as_str())
+                    .text(s.replace("\n", "").as_str())
                     .map_err(|e| Status::unknown(e.to_string()))
                     .unwrap_or_default();
 
