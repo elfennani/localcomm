@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate slugify;
 
+use std::process::Command;
 use crate::localcomm::{
     Device, Empty, GetDeviceListRequest, GetDeviceListResponse, RunCommandRequest, TextTypeRequest,
 };
@@ -76,7 +77,11 @@ impl LocalComm for LocalCommApp {
         &self,
         request: Request<RunCommandRequest>,
     ) -> Result<Response<Empty>, Status> {
-        std::process::Command::new(request.into_inner().command).spawn()?;
+        Command::new("sh")
+            .arg("-c")
+            .arg(request.into_inner().command)
+            .output()
+            .expect("failed to execute");
 
         Ok(Response::new(Empty {}))
     }
