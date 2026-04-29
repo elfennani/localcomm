@@ -54,7 +54,7 @@ impl LocalCommService {
             // Create a service info.
             // Make sure that the service name: "mdns-sd-my-test" is not longer than the max length limit (15 by default).
 
-            let device_name = whoami::devicename().unwrap();
+            let device_name = whoami::hostname().unwrap();
             let instance_name = slugify!(&device_name, separator = "_");
             let ip = local_ip().unwrap().to_string();
             let host_name = format!("{}.local.", instance_name);
@@ -86,7 +86,7 @@ impl LocalCommService {
         let mdns = self.mdns.clone();
 
         let service_type = self.service_type.clone();
-        let device_name = slugify!(whoami::devicename().unwrap().as_str(), separator = "_");
+        let device_name = slugify!(whoami::hostname().unwrap().as_str(), separator = "_");
         let receiver = mdns.browse(&service_type).expect("Failed to browse");
 
         task::spawn(async move {
