@@ -57,21 +57,17 @@ impl LocalComm for LocalCommApp {
         let mut enigo =
             Enigo::new(&Settings::default()).map_err(|e| Status::unknown(e.to_string()))?;
         let text = request.into_inner().text;
+        let mut lines = text.lines().peekable();
 
-        if text.contains("\n") {
-            text.split("\n").for_each(|s| {
-                enigo
-                    .text(s.replace("\n", "").as_str())
-                    .map_err(|e| Status::unknown(e.to_string()))
-                    .unwrap_or_default();
-
-                enigo.key(Key::Return, Direction::Click).unwrap_or_default();
-            });
-        } else{
+        while let Some(line) = lines.next() {
             enigo
-                .text(text.as_str())
+                .text(line)
                 .map_err(|e| Status::unknown(e.to_string()))
                 .unwrap_or_default();
+
+            if lines.peek().is_some() {
+                enigo.key(Key::Return, Direction::Click).unwrap_or_default();
+            }
         }
 
         Ok(Response::new(Empty {}))
