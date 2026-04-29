@@ -1,6 +1,9 @@
+#[macro_use]
+extern crate slugify;
 use crate::service::LocalCommService;
 use localcomm::local_comm_server::{LocalComm, LocalCommServer};
 use localcomm::{HelloReply, HelloRequest};
+use tokio::signal;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
@@ -38,10 +41,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let localcomm = LocalCommApp::default();
 
     println!("LocalComm instance listening on {}", addr);
-    Server::builder()
+    let server = Server::builder()
         .add_service(LocalCommServer::new(localcomm))
-        .serve(addr)
-        .await?;
+        .serve(addr);
+
+    // This macro simply allows for cancelling all async operation as soon as one finishes.
+    tokio::select! {
+        result = server => {
+            result?;
+        }
+        _ = signal::ctrl_c() => {
+            println!("Ctrl+C received, shutting down...");
+        }
+    }
+
+    service.stop();
 
     Ok(())
 }
