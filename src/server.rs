@@ -5,7 +5,7 @@ use crate::localcomm::{
     Device, Empty, GetDeviceListRequest, GetDeviceListResponse, TextTypeRequest,
 };
 use crate::service::{LocalCommDevice, LocalCommService};
-use enigo::{Enigo, Keyboard, Settings};
+use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use localcomm::local_comm_server::{LocalComm, LocalCommServer};
 use std::sync::{Arc, Mutex};
 use tokio::signal;
@@ -56,10 +56,23 @@ impl LocalComm for LocalCommApp {
     ) -> Result<Response<Empty>, Status> {
         let mut enigo =
             Enigo::new(&Settings::default()).map_err(|e| Status::unknown(e.to_string()))?;
+        let text = request.into_inner().text;
 
-        enigo
-            .text(request.into_inner().text.as_str())
-            .map_err(|e| Status::unknown(e.to_string()))?;
+        if text.contains("\n") {
+            text.split("\n").for_each(|s| {
+                enigo
+                    .text(text.replace("\n", "").as_str())
+                    .map_err(|e| Status::unknown(e.to_string()))
+                    .unwrap_or_default();
+
+                enigo.key(Key::Return, Direction::Click).unwrap_or_default();
+            });
+        } else{
+            enigo
+                .text(text.as_str())
+                .map_err(|e| Status::unknown(e.to_string()))
+                .unwrap_or_default();
+        }
 
         Ok(Response::new(Empty {}))
     }
