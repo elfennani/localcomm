@@ -41,6 +41,8 @@ enum Commands {
         device: String,
         #[arg(short, long)]
         path: String,
+        #[arg(short, long)]
+        buffer: Option<u8>,
     },
 }
 
@@ -78,7 +80,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
             client.run_command(request).await?;
         }
-        Some(Commands::SendFile { device, path }) => {
+        Some(Commands::SendFile {
+            device,
+            path,
+            buffer,
+        }) => {
             let mut client = create_device_client(&mut client, device.as_str()).await;
             let file_name = path.split("/").last().unwrap();
             let path = Path::new(path);
@@ -87,6 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let size = std::fs::metadata(path)
                 .expect("Failed to read metadata")
                 .len();
+            let buffer_size: usize = buffer.unwrap_or((128 * 1024) as u8) as usize;
             let progress_bar = ProgressBar::new(size)
                 .with_style(
                     ProgressStyle::default_bar()
@@ -99,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             loop {
-                let mut buffer = [0; 128 * 1024];
+                let mut buffer = vec![0u8; buffer_size];
                 let n = file.read(&mut buffer[..])?;
 
                 if n == 0 {
@@ -111,7 +118,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     position: written,
                     bytes: buffer[..n].to_vec(),
                     size,
-                    buffer_size: 128 * 1024
+                    buffer_size: 128 * 1024,
                 });
 
                 client.send_file(request).await?;

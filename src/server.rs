@@ -9,8 +9,9 @@ use crate::service::{LocalCommDevice, LocalCommService};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
 use localcomm::local_comm_server::{LocalComm, LocalCommServer};
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tokio::signal;
@@ -27,13 +28,22 @@ pub mod localcomm {
 pub struct LocalCommApp {
     device_list: Arc<Mutex<Vec<LocalCommDevice>>>,
     progress_bar: Arc<Mutex<Option<ProgressBar>>>,
+    download_dir: PathBuf,
+    uploading_file: Arc<Mutex<Option<File>>>,
 }
 
 impl LocalCommApp {
     pub fn new(device_list: Arc<Mutex<Vec<LocalCommDevice>>>) -> Self {
+        let user_dirs = directories::UserDirs::new().expect("cannot get user directories");
+        let download_dir = user_dirs
+            .download_dir()
+            .expect("Failed to retrieve download directory");
+
         LocalCommApp {
             device_list,
             progress_bar: Arc::new(Mutex::new(None)),
+            uploading_file: Arc::new(Mutex::new(None)),
+            download_dir: download_dir.to_path_buf(),
         }
     }
 }
@@ -100,6 +110,8 @@ impl LocalComm for LocalCommApp {
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
         let mut progress_bar = self.progress_bar.lock().unwrap();
+        let mut file = self.uploading_file.lock().unwrap();
+        let file_path = self.download_dir.join(req.name.clone());
 
         if req.position == 0 {
             *progress_bar = Some(
@@ -111,29 +123,23 @@ impl LocalComm for LocalCommApp {
                     )
                     .with_message(format!("Saving {}", req.name)),
             );
+            *file = Some(
+                OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&file_path)
+                    .expect("cannot open file"),
+            );
             println!(
                 "Got a request to receive a file {} ({} bytes)",
                 req.name, req.size
             )
         };
 
-        let user_dirs = directories::UserDirs::new().expect("cannot get user directories");
-        let file_path = user_dirs
-            .download_dir()
-            .expect("Failed to retrieve download directory")
-            .join(req.name);
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .append(req.position != 0)
-            .truncate(req.position == 0)
-            .open(&file_path)
-            .expect("cannot open file");
-
-        file.write_all(req.bytes.as_slice())
-            .expect("Failed to write file");
-        file.flush().expect("Failed to flush file");
+        if let Some(f) = file.as_mut() {
+            f.write_all(req.bytes.as_slice())
+                .expect("Failed to write file");
+        }
 
         if let Some(progress_bar) = &*progress_bar {
             progress_bar.set_position(req.position);
@@ -145,6 +151,11 @@ impl LocalComm for LocalCommApp {
             }
 
             println!("Saved File to {}", file_path.display());
+
+            if let Some(f) = file.as_mut() {
+                f.flush().expect("Failed to write file");
+                *file = None;
+            }
         }
 
         Ok(Response::new(Empty {}))
