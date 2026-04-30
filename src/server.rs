@@ -127,6 +127,7 @@ impl LocalComm for LocalCommApp {
             .create(true)
             .write(true)
             .append(req.position != 0)
+            .truncate(req.position == 0)
             .open(&file_path)
             .expect("cannot open file");
 
