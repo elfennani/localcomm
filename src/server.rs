@@ -139,7 +139,6 @@ impl LocalComm for LocalCommApp {
         &self,
         request: Request<SendFileRequest>,
     ) -> Result<Response<Empty>, Status> {
-        println!("Got a request from {:?}", request.remote_addr());
         let req = request.into_inner();
         let mut progress_bar = self.progress_bar.lock().unwrap();
         let mut file = self.uploading_file.lock().unwrap();
