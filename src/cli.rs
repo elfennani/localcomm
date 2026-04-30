@@ -111,6 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     position: written,
                     bytes: buffer[..n].to_vec(),
                     size,
+                    buffer_size: 128 * 1024
                 });
 
                 client.send_file(request).await?;

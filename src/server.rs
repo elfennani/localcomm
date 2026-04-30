@@ -138,7 +138,7 @@ impl LocalComm for LocalCommApp {
             progress_bar.set_position(req.position);
         }
 
-        if req.size - req.position <= 1024 {
+        if req.size - req.position <= (req.buffer_size as u64) {
             if let Some(progress_bar) = &*progress_bar {
                 progress_bar.finish_with_message("Done");
             }

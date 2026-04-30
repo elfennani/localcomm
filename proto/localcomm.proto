@@ -32,6 +32,7 @@ message SendFileRequest{
   uint64 position = 2;
   uint64 size = 3;
   bytes bytes = 4;
+  uint32 buffer_size = 5;
 }
 
 message Empty{}
