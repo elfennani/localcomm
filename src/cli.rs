@@ -1,3 +1,4 @@
+use std::string::String;
 use crate::localcomm::local_comm_client::LocalCommClient;
 use crate::localcomm::{GetDeviceListRequest, RunCommandRequest, SendFileRequest, TextTypeRequest};
 use clap::{Parser, Subcommand};
@@ -5,7 +6,9 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::sync::mpsc;
 use tonic::Request;
+use tonic::codegen::tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Channel;
 
 pub mod localcomm {
@@ -86,8 +89,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             buffer,
         }) => {
             let mut client = create_device_client(&mut client, device.as_str()).await;
-            let file_name = path.split("/").last().unwrap();
-            let path = Path::new(path);
+            let buffer = buffer.clone();
+            let path: String = path.clone();
+
+            let (tx, rx) = tokio::sync::mpsc::channel(10);
+            let file_name = path.split("/").last().unwrap().to_string();
+            let path = Path::new(path.as_str());
             let mut file = File::open(path).expect("Failed to open file");
             let mut written: u64 = 0;
             let size = std::fs::metadata(path)
@@ -97,7 +104,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let progress_bar = ProgressBar::new(size)
                 .with_style(
                     ProgressStyle::default_bar()
-                        .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")?,
+                        .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                        .unwrap(),
                 )
                 .with_message(format!("Sending {}", file_name));
 
@@ -105,30 +113,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 panic!("Path is a directory");
             }
 
-            loop {
-                let mut buffer = vec![0u8; buffer_size];
-                let n = file.read(&mut buffer[..])?;
+            tokio::spawn(async move {
+                loop {
+                    let mut buffer = vec![0u8; buffer_size];
+                    let n = file.read(&mut buffer[..]).unwrap();
 
-                if n == 0 {
-                    break;
+                    if n == 0 {
+                        break;
+                    }
+
+                    tx.send(SendFileRequest {
+                        name: file_name.to_string(),
+                        position: written,
+                        bytes: buffer[..n].to_vec(),
+                        size,
+                        buffer_size: 128 * 1024,
+                    })
+                        .await
+                        .unwrap();
+
+                    written += n as u64;
+                    progress_bar.set_position(written)
                 }
 
-                let request = Request::new(SendFileRequest {
-                    name: file_name.to_string(),
-                    position: written,
-                    bytes: buffer[..n].to_vec(),
-                    size,
-                    buffer_size: 128 * 1024,
-                });
+                progress_bar.finish_with_message(format!("{} sent!", file_name));
+            });
 
-                client.send_file(request).await?;
-
-                written += n as u64;
-                progress_bar.set_position(written)
-            }
-
-            progress_bar.finish_with_message(format!("{} sent!", file_name));
+            let stream = ReceiverStream::new(rx);
+            client.send_file(stream).await?;
         }
+
         None => {}
     };
 

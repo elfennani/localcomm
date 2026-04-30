@@ -17,7 +17,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tokio::signal;
 use tonic::transport::Server;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response, Status, Streaming};
 
 mod service;
 
@@ -137,56 +137,59 @@ impl LocalComm for LocalCommApp {
 
     async fn send_file(
         &self,
-        request: Request<SendFileRequest>,
+        request: tonic::Request<Streaming<SendFileRequest>>,
     ) -> Result<Response<Empty>, Status> {
-        let req = request.into_inner();
-        let mut progress_bar = self.progress_bar.lock().unwrap();
-        let mut file = self.uploading_file.lock().unwrap();
+        let mut stream = request.into_inner();
 
-        if req.position == 0 {
-            *progress_bar = Some(
-                ProgressBar::new(req.size)
-                    .with_style(
-                        ProgressStyle::default_bar()
-                            .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-                            .unwrap(),
-                    )
-                    .with_message(format!("Saving {}", req.name)),
-            );
-            *file = Some(
-                OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(Self::unique_path(
-                        self.download_dir.clone(),
-                        req.name.clone(),
-                    ))
-                    .expect("cannot open file"),
-            );
-            println!(
-                "Got a request to receive a file {} ({} bytes)",
-                req.name, req.size
-            )
-        };
+        while let Some(req) = stream.message().await? {
+            let mut progress_bar = self.progress_bar.lock().unwrap();
+            let mut file = self.uploading_file.lock().unwrap();
 
-        if let Some(f) = file.as_mut() {
-            f.write_all(req.bytes.as_slice())
-                .expect("Failed to write file");
-        }
-
-        if let Some(progress_bar) = &*progress_bar {
-            progress_bar.set_position(req.position);
-        }
-
-        if req.size - req.position <= (req.buffer_size as u64) {
-            if let Some(progress_bar) = &*progress_bar {
-                progress_bar.finish_with_message("Done");
-            }
+            if req.position == 0 {
+                *progress_bar = Some(
+                    ProgressBar::new(req.size)
+                        .with_style(
+                            ProgressStyle::default_bar()
+                                .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                                .unwrap(),
+                        )
+                        .with_message(format!("Saving {}", req.name)),
+                );
+                *file = Some(
+                    OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(Self::unique_path(
+                            self.download_dir.clone(),
+                            req.name.clone(),
+                        ))
+                        .expect("cannot open file"),
+                );
+                println!(
+                    "Got a request to receive a file {} ({} bytes)",
+                    req.name, req.size
+                )
+            };
 
             if let Some(f) = file.as_mut() {
-                println!("Saved File in {}", self.download_dir.display());
-                f.flush().expect("Failed to write file");
-                *file = None;
+                f.write_all(req.bytes.as_slice())
+                    .expect("Failed to write file");
+            }
+
+            if let Some(progress_bar) = &*progress_bar {
+                progress_bar.set_position(req.position);
+            }
+
+            if req.size - req.position <= (req.buffer_size as u64) {
+                if let Some(progress_bar) = &*progress_bar {
+                    progress_bar.finish_with_message("Done");
+                }
+
+                if let Some(f) = file.as_mut() {
+                    println!("Saved File in {}", self.download_dir.display());
+                    f.flush().expect("Failed to write file");
+                    *file = None;
+                }
             }
         }
 
