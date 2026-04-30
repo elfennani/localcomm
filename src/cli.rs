@@ -1,6 +1,9 @@
 use crate::localcomm::local_comm_client::LocalCommClient;
-use crate::localcomm::{GetDeviceListRequest, RunCommandRequest, TextTypeRequest};
+use crate::localcomm::{GetDeviceListRequest, RunCommandRequest, SendFileRequest, TextTypeRequest};
 use clap::{Parser, Subcommand};
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 use tonic::Request;
 use tonic::transport::Channel;
 
@@ -31,6 +34,12 @@ enum Commands {
         device: String,
         #[arg(short, long)]
         command: String,
+    },
+    SendFile {
+        #[arg(short, long)]
+        device: String,
+        #[arg(short, long)]
+        path: String,
     },
 }
 
@@ -67,6 +76,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 command: command.to_string(),
             });
             client.run_command(request).await?;
+        }
+        Some(Commands::SendFile { device, path }) => {
+            let mut client = create_device_client(&mut client, device.as_str()).await;
+            let mut file = File::open(Path::new(path)).expect("Failed to open file");
+            let file_name = path.split("/").last().unwrap();
+
+            loop {
+                let mut buffer = [0; 1024];
+                let n = file.read(&mut buffer[..])?;
+
+                if n == 0 {
+                    break;
+                }
+
+                let request = Request::new(SendFileRequest {
+                    name: file_name.to_string(),
+                    bytes: buffer.to_vec(),
+                });
+
+                client.send_file(request).await?;
+            }
         }
         None => {}
     };

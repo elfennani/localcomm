@@ -1,13 +1,17 @@
 #[macro_use]
 extern crate slugify;
 
-use std::process::Command;
 use crate::localcomm::{
-    Device, Empty, GetDeviceListRequest, GetDeviceListResponse, RunCommandRequest, TextTypeRequest,
+    Device, Empty, GetDeviceListRequest, GetDeviceListResponse, RunCommandRequest, SendFileRequest,
+    TextTypeRequest,
 };
 use crate::service::{LocalCommDevice, LocalCommService};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use localcomm::local_comm_server::{LocalComm, LocalCommServer};
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tokio::signal;
 use tonic::transport::Server;
@@ -82,6 +86,20 @@ impl LocalComm for LocalCommApp {
             .arg(request.into_inner().command)
             .output()
             .expect("failed to execute");
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn send_file(
+        &self,
+        request: Request<SendFileRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let user_dirs = directories::UserDirs::new().unwrap();
+        let file_path = user_dirs.download_dir().unwrap().with_file_name(req.name);
+        let file = File::create(file_path);
+
+        file?.write(req.bytes.as_slice())?;
 
         Ok(Response::new(Empty {}))
     }

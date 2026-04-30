@@ -5,6 +5,7 @@ service LocalComm {
   rpc GetDeviceList (GetDeviceListRequest) returns (GetDeviceListResponse);
   rpc TypeText (TextTypeRequest) returns (Empty);
   rpc RunCommand (RunCommandRequest) returns (Empty);
+  rpc SendFile (SendFileRequest) returns (Empty);
 }
 
 message TextTypeRequest{
@@ -24,6 +25,11 @@ message GetDeviceListResponse{
 
 message RunCommandRequest{
   string command = 1;
+}
+
+message SendFileRequest{
+  string name = 1;
+  bytes bytes = 2;
 }
 
 message Empty{}
