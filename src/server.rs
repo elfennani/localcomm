@@ -8,9 +8,8 @@ use crate::localcomm::{
 use crate::service::{LocalCommDevice, LocalCommService};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use localcomm::local_comm_server::{LocalComm, LocalCommServer};
-use std::fs::File;
+use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tokio::signal;
@@ -95,20 +94,31 @@ impl LocalComm for LocalCommApp {
         request: Request<SendFileRequest>,
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
-        println!(
-            "Got a request to receive a file {} ({} bytes)",
-            req.name,
-            req.bytes.len()
-        );
+        if req.position == 0 {
+            println!(
+                "Got a request to receive a file {} ({} bytes)",
+                req.name,
+                req.size
+            )
+        };
+
         let user_dirs = directories::UserDirs::new().expect("cannot get user directories");
         let file_path = user_dirs
             .download_dir()
             .expect("Failed to retrieve download directory")
-            .with_file_name(req.name);
-        println!("Sending file {}", file_path.display());
-        let mut file = File::create(file_path).expect("Failed to create file");
+            .join(req.name);
 
-        file.write(req.bytes.as_slice())
+        if req.position == req.size {
+            println!("Saved File {}", file_path.display());
+        }
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(req.position != 0)
+            .open(&file_path)
+            .expect("cannot open file");
+
+        file.write_all(req.bytes.as_slice())
             .expect("Failed to write file");
         file.flush().expect("Failed to flush file");
 

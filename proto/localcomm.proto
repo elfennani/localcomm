@@ -29,7 +29,9 @@ message RunCommandRequest{
 
 message SendFileRequest{
   string name = 1;
-  bytes bytes = 2;
+  uint64 position = 2;
+  uint64 size = 3;
+  bytes bytes = 4;
 }
 
 message Empty{}

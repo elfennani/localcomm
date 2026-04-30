@@ -79,8 +79,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Some(Commands::SendFile { device, path }) => {
             let mut client = create_device_client(&mut client, device.as_str()).await;
-            let mut file = File::open(Path::new(path)).expect("Failed to open file");
             let file_name = path.split("/").last().unwrap();
+            let path = Path::new(path);
+            let mut file = File::open(path).expect("Failed to open file");
+            let mut written: u64 = 0;
+            let size = std::fs::metadata(path)
+                .expect("Failed to read metadata")
+                .len();
+
+            if path.is_dir() {
+                panic!("Path is a directory");
+            }
 
             loop {
                 let mut buffer = [0; 1024];
@@ -92,10 +101,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let request = Request::new(SendFileRequest {
                     name: file_name.to_string(),
-                    bytes: buffer.to_vec(),
+                    position: written,
+                    bytes: buffer[..n].to_vec(),
+                    size,
                 });
 
                 client.send_file(request).await?;
+
+                written += n as u64;
             }
         }
         None => {}
