@@ -100,8 +100,12 @@ impl LocalComm for LocalCommApp {
             req.name,
             req.bytes.len()
         );
-        let user_dirs = directories::UserDirs::new().unwrap();
-        let file_path = user_dirs.download_dir().unwrap().with_file_name(req.name);
+        let user_dirs = directories::UserDirs::new().expect("cannot get user directories");
+        let file_path = user_dirs
+            .download_dir()
+            .expect("Failed to retrieve download directory")
+            .with_file_name(req.name);
+        println!("Sending file {}", file_path.display());
         let mut file = File::create(file_path).expect("Failed to create file");
 
         file.write(req.bytes.as_slice())

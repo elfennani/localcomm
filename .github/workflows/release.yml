@@ -19,6 +19,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup caching
+        uses: Swatinem/rust-cache@v2
+
       - name: Build release CLI
         run: cargo build --release --bin cli
 
