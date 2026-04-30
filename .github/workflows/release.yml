@@ -21,12 +21,11 @@ jobs:
 
       - name: Setup caching
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "localcomm"
 
-      - name: Build release CLI
-        run: cargo build --release --bin cli
-
-      - name: Build release server
-        run: cargo build --release --bin server
+      - name: Build binaries
+        run: cargo build --release --bins
 
       - name: Prepare binary
         run: |
