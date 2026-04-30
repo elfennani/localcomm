@@ -6,7 +6,6 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::sync::mpsc;
 use tonic::Request;
 use tonic::codegen::tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Channel;
@@ -89,10 +88,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             buffer,
         }) => {
             let mut client = create_device_client(&mut client, device.as_str()).await;
+            let (tx, rx) = tokio::sync::mpsc::channel(32);
+
             let buffer = buffer.clone();
             let path: String = path.clone();
 
-            let (tx, rx) = tokio::sync::mpsc::channel(10);
             let file_name = path.split("/").last().unwrap().to_string();
             let path = Path::new(path.as_str());
             let mut file = File::open(path).expect("Failed to open file");
