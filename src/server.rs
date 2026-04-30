@@ -7,6 +7,7 @@ use crate::localcomm::{
 };
 use crate::service::{LocalCommDevice, LocalCommService};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
 use localcomm::local_comm_server::{LocalComm, LocalCommServer};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -25,11 +26,15 @@ pub mod localcomm {
 #[derive(Debug)]
 pub struct LocalCommApp {
     device_list: Arc<Mutex<Vec<LocalCommDevice>>>,
+    progress_bar: Arc<Mutex<Option<ProgressBar>>>,
 }
 
 impl LocalCommApp {
     pub fn new(device_list: Arc<Mutex<Vec<LocalCommDevice>>>) -> Self {
-        LocalCommApp { device_list }
+        LocalCommApp {
+            device_list,
+            progress_bar: Arc::new(Mutex::new(None)),
+        }
     }
 }
 
@@ -94,11 +99,21 @@ impl LocalComm for LocalCommApp {
         request: Request<SendFileRequest>,
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
+        let mut progress_bar = self.progress_bar.lock().unwrap();
+
         if req.position == 0 {
+            *progress_bar = Some(
+                ProgressBar::new(req.size)
+                    .with_style(
+                        ProgressStyle::default_bar()
+                            .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                            .unwrap(),
+                    )
+                    .with_message(format!("Saving {}", req.name)),
+            );
             println!(
                 "Got a request to receive a file {} ({} bytes)",
-                req.name,
-                req.size
+                req.name, req.size
             )
         };
 
@@ -108,12 +123,9 @@ impl LocalComm for LocalCommApp {
             .expect("Failed to retrieve download directory")
             .join(req.name);
 
-        if req.position == req.size {
-            println!("Saved File {}", file_path.display());
-        }
-
         let mut file = OpenOptions::new()
             .create(true)
+            .write(true)
             .append(req.position != 0)
             .open(&file_path)
             .expect("cannot open file");
@@ -121,6 +133,18 @@ impl LocalComm for LocalCommApp {
         file.write_all(req.bytes.as_slice())
             .expect("Failed to write file");
         file.flush().expect("Failed to flush file");
+
+        if let Some(progress_bar) = &*progress_bar {
+            progress_bar.set_position(req.position);
+        }
+
+        if req.size - req.position <= 1024 {
+            if let Some(progress_bar) = &*progress_bar {
+                progress_bar.finish_with_message("Done");
+            }
+
+            println!("Saved File to {}", file_path.display());
+        }
 
         Ok(Response::new(Empty {}))
     }

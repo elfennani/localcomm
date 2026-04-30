@@ -1,6 +1,7 @@
 use crate::localcomm::local_comm_client::LocalCommClient;
 use crate::localcomm::{GetDeviceListRequest, RunCommandRequest, SendFileRequest, TextTypeRequest};
 use clap::{Parser, Subcommand};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -86,13 +87,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let size = std::fs::metadata(path)
                 .expect("Failed to read metadata")
                 .len();
+            let progress_bar = ProgressBar::new(size)
+                .with_style(
+                    ProgressStyle::default_bar()
+                        .template("{msg} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")?,
+                )
+                .with_message(format!("Sending {}", file_name));
 
             if path.is_dir() {
                 panic!("Path is a directory");
             }
 
             loop {
-                let mut buffer = [0; 1024];
+                let mut buffer = [0; 128 * 1024];
                 let n = file.read(&mut buffer[..])?;
 
                 if n == 0 {
@@ -109,7 +116,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 client.send_file(request).await?;
 
                 written += n as u64;
+                progress_bar.set_position(written)
             }
+
+            progress_bar.finish_with_message(format!("{} sent!", file_name));
         }
         None => {}
     };

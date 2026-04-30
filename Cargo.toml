@@ -23,6 +23,7 @@ whoami = "2.1.2"
 slugify = "0.1.0"
 enigo = "0.6.1"
 directories = "6.0.0"
+indicatif = "0.18.4"
 
 [build-dependencies]
 tonic-prost-build = "*"
