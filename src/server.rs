@@ -95,11 +95,18 @@ impl LocalComm for LocalCommApp {
         request: Request<SendFileRequest>,
     ) -> Result<Response<Empty>, Status> {
         let req = request.into_inner();
+        println!(
+            "Got a request to receive a file {} ({} bytes)",
+            req.name,
+            req.bytes.len()
+        );
         let user_dirs = directories::UserDirs::new().unwrap();
         let file_path = user_dirs.download_dir().unwrap().with_file_name(req.name);
-        let file = File::create(file_path);
+        let mut file = File::create(file_path).expect("Failed to create file");
 
-        file?.write(req.bytes.as_slice())?;
+        file.write(req.bytes.as_slice())
+            .expect("Failed to write file");
+        file.flush().expect("Failed to flush file");
 
         Ok(Response::new(Empty {}))
     }
