@@ -42,7 +42,7 @@ enum Commands {
         #[arg(short, long)]
         path: String,
         #[arg(short, long)]
-        buffer: Option<u8>,
+        buffer: Option<u32>,
     },
 }
 
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let size = std::fs::metadata(path)
                 .expect("Failed to read metadata")
                 .len();
-            let buffer_size: usize = buffer.unwrap_or((128 * 1024) as u8) as usize;
+            let buffer_size: usize = buffer.unwrap_or((128 * 1024) as u32) as usize;
             let progress_bar = ProgressBar::new(size)
                 .with_style(
                     ProgressStyle::default_bar()

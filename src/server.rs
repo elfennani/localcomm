@@ -9,6 +9,7 @@ use crate::service::{LocalCommDevice, LocalCommService};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
 use localcomm::local_comm_server::{LocalComm, LocalCommServer};
+use std::ffi::{CString, OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -45,6 +46,36 @@ impl LocalCommApp {
             uploading_file: Arc::new(Mutex::new(None)),
             download_dir: download_dir.to_path_buf(),
         }
+    }
+
+    pub fn unique_path(parent: PathBuf, name: String) -> PathBuf {
+        let mut base = parent.clone();
+        base.push(&name);
+
+        if !base.exists() {
+            return base;
+        }
+
+        let path = Path::new(&name);
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let ext = path.extension().and_then(|e| e.to_str());
+
+        for i in 1.. {
+            let candidate_name = if let Some(ext) = ext {
+                format!("{stem} ({i}).{ext}")
+            } else {
+                format!("{stem} ({i})")
+            };
+
+            let mut candidate = parent.clone();
+            candidate.push(&candidate_name);
+
+            if !candidate.exists() {
+                return candidate;
+            }
+        }
+
+        unreachable!()
     }
 }
 
@@ -108,10 +139,10 @@ impl LocalComm for LocalCommApp {
         &self,
         request: Request<SendFileRequest>,
     ) -> Result<Response<Empty>, Status> {
+        println!("Got a request from {:?}", request.remote_addr());
         let req = request.into_inner();
         let mut progress_bar = self.progress_bar.lock().unwrap();
         let mut file = self.uploading_file.lock().unwrap();
-        let file_path = self.download_dir.join(req.name.clone());
 
         if req.position == 0 {
             *progress_bar = Some(
@@ -127,7 +158,10 @@ impl LocalComm for LocalCommApp {
                 OpenOptions::new()
                     .create(true)
                     .append(true)
-                    .open(&file_path)
+                    .open(Self::unique_path(
+                        self.download_dir.clone(),
+                        req.name.clone(),
+                    ))
                     .expect("cannot open file"),
             );
             println!(
@@ -150,9 +184,8 @@ impl LocalComm for LocalCommApp {
                 progress_bar.finish_with_message("Done");
             }
 
-            println!("Saved File to {}", file_path.display());
-
             if let Some(f) = file.as_mut() {
+                println!("Saved File in {}", self.download_dir.display());
                 f.flush().expect("Failed to write file");
                 *file = None;
             }
