@@ -7,9 +7,8 @@ use crate::localcomm::{
 };
 use crate::service::{LocalCommDevice, LocalCommService};
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-use indicatif::{HumanBytes, ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 use localcomm::local_comm_server::{LocalComm, LocalCommServer};
-use std::ffi::{CString, OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
